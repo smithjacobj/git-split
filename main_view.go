@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/jroimartin/gocui"
+	"github.com/awesome-gocui/gocui"
 )
 
 const k_MainView = "main"
@@ -11,58 +12,66 @@ const k_MainView = "main"
 type MainView struct {
 	*gocui.Gui
 	*gocui.View
+
+	commit *Commit
 }
 
-func NewMainView(g *gocui.Gui) (v *MainView, err error) {
+func LayoutMainView(g *gocui.Gui) (v *MainView, isInit bool, err error) {
 	v = &MainView{Gui: g}
 	maxX, maxY := g.Size()
-	v.View, err = g.SetView(k_MainView, 0, k_HelpViewHeight-1, maxX-1, maxY-1)
+	v.View, err = g.SetView(k_MainView, 0, k_HelpViewHeight-1, maxX-1, maxY-1, 0)
 	if err != nil {
-		if err != gocui.ErrUnknownView {
-			return nil, err
+		if err == gocui.ErrUnknownView {
+			isInit = true
+		} else {
+			return nil, false, err
 		}
-		v.printContent()
 	}
 
-	v.View.SelBgColor = gocui.ColorWhite
-	v.View.SelFgColor = gocui.ColorBlack
-	v.View.Frame = false
-	v.View.Highlight = true
+	if isInit {
+		if err := v.setKeybindings(); err != nil {
+			return nil, false, err
+		}
 
-	if err := v.setKeybindings(); err != nil {
-		return nil, err
+		v.View.Frame = false
+		v.View.Highlight = true
 	}
 
-	return v, nil
+	return v, isInit, nil
+}
+
+func (v *MainView) SetCommit(c *Commit) {
+	v.commit = c
+	v.printContent()
+	v.View.SetCursor(0, 0)
 }
 
 func (v *MainView) setKeybindings() error {
-	if err := v.Gui.SetKeybinding(k_MainView, gocui.KeyArrowUp, gocui.ModNone, moveCursorUp); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowUp, gocui.ModNone, moveCursor(0, -1)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(k_MainView, gocui.KeyArrowDown, gocui.ModNone, moveCursorDown); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowUp, gocui.ModShift, moveCursor(0, -15)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModNone, moveCursor(0, 1)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModShift, moveCursor(0, 15)); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (v *MainView) printContent() {
-	fmt.Fprintln(v.View, "MAIN")
+	v.View.Clear()
+	commitString := strings.TrimSpace(v.commit.String())
+	fmt.Fprint(v.View, commitString)
 
-	// TODO:
 }
 
-func moveCursorUp(g *gocui.Gui, v *gocui.View) error {
-	if _, y := v.Cursor(); y > 0 {
-		v.MoveCursor(0, -1, false)
+func moveCursor(x, y int) func(g *gocui.Gui, v *gocui.View) error {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		v.MoveCursor(x, y)
+		return nil
 	}
-	return nil
-}
-
-func moveCursorDown(g *gocui.Gui, v *gocui.View) error {
-	_, maxY := v.Size()
-	if _, y := v.Cursor(); y < maxY-1 {
-		v.MoveCursor(0, 1, false)
-	}
-	return nil
 }

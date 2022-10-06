@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/jroimartin/gocui"
+	"github.com/awesome-gocui/gocui"
 )
 
 const k_HelpView = "help"
@@ -14,10 +14,10 @@ type HelpView struct {
 	*gocui.View
 }
 
-func NewHelpView(g *gocui.Gui) (v *HelpView, err error) {
+func LayoutHelpView(g *gocui.Gui) (v *HelpView, err error) {
 	v = &HelpView{Gui: g}
 	maxX, _ := g.Size()
-	v.View, err = g.SetView(k_HelpView, 0, 0, maxX-1, k_HelpViewHeight-1)
+	v.View, err = g.SetView(k_HelpView, 0, 0, maxX-1, k_HelpViewHeight-1, 0)
 	if err != nil {
 		if err != gocui.ErrUnknownView {
 			return nil, err
