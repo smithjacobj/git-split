@@ -35,6 +35,14 @@ func (s SelectionState) String() string {
 	return k_MissingSpacer
 }
 
+func (s *SelectionState) Toggle() {
+	if *s == Selected || *s == PartiallySelected {
+		*s = Deselected
+	} else {
+		*s = Selected
+	}
+}
+
 type ExpansionState int
 
 const (
@@ -71,11 +79,13 @@ type LineFunc func(*File, *Chunk, *Line) error
 
 func (c *Commit) ForEachNode(ffn FileFunc, cfn ChunkFunc, lfn LineFunc) error {
 	for _, file := range c.Files {
-		if err := ffn(file); err != nil {
-			if err == errBreak {
-				break
-			} else {
-				return err
+		if ffn != nil {
+			if err := ffn(file); err != nil {
+				if err == errBreak {
+					break
+				} else {
+					return err
+				}
 			}
 		}
 		file.ForEachNode(cfn, lfn)
@@ -144,16 +154,41 @@ type File struct {
 
 func (file *File) ForEachNode(cfn ChunkFunc, lfn LineFunc) error {
 	for _, chunk := range file.Chunks {
-		if err := cfn(file, chunk); err != nil {
-			if err == errBreak {
-				break
-			} else {
-				return err
+		if cfn != nil {
+			if err := cfn(file, chunk); err != nil {
+				if err == errBreak {
+					break
+				} else {
+					return err
+				}
 			}
 		}
 		chunk.ForEachNode(lfn)
 	}
 	return nil
+}
+
+func (file *File) UpdateSelection() {
+	selectedChunkCount := 0
+	partiallySelectedChunkCount := 0
+	file.ForEachNode(
+		func(f *File, c *Chunk) error {
+			if c.Selected == Selected {
+				selectedChunkCount++
+			} else if c.Selected == PartiallySelected {
+				partiallySelectedChunkCount++
+			}
+			return nil
+		},
+		nil,
+	)
+	if selectedChunkCount == len(file.Chunks) {
+		file.Selected = Selected
+	} else if selectedChunkCount > 0 || partiallySelectedChunkCount > 0 {
+		file.Selected = PartiallySelected
+	} else {
+		file.Selected = Deselected
+	}
 }
 
 type Chunk struct {
@@ -167,15 +202,40 @@ type Chunk struct {
 
 func (chunk *Chunk) ForEachNode(lfn LineFunc) error {
 	for _, line := range chunk.Lines {
-		if err := lfn(chunk.Parent, chunk, line); err != nil {
-			if err == errBreak {
-				break
-			} else {
-				return err
+		if lfn != nil {
+			if err := lfn(chunk.Parent, chunk, line); err != nil {
+				if err == errBreak {
+					break
+				} else {
+					return err
+				}
 			}
 		}
 	}
 	return nil
+}
+
+func (chunk *Chunk) UpdateSelection() {
+	selectedLineCount := 0
+	partiallySelectedLineCount := 0
+	chunk.ForEachNode(
+		func(f *File, c *Chunk, l *Line) error {
+			if l.Selected == Selected {
+				selectedLineCount++
+			} else if l.Selected == PartiallySelected {
+				partiallySelectedLineCount++
+			}
+			return nil
+		},
+	)
+	if selectedLineCount == len(chunk.Lines) {
+		chunk.Selected = Selected
+	} else if selectedLineCount > 0 || partiallySelectedLineCount > 0 {
+		chunk.Selected = PartiallySelected
+	} else {
+		chunk.Selected = Deselected
+	}
+	chunk.Parent.UpdateSelection()
 }
 
 type Line struct {

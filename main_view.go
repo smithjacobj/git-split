@@ -72,9 +72,15 @@ func (v *MainView) setKeybindings() error {
 }
 
 func (v *MainView) printContent() {
+	x, y := v.View.Cursor()
+	_, oY := v.View.Origin()
+
 	v.View.Clear()
 	commitString := strings.TrimSpace(v.commit.String())
 	fmt.Fprint(v.View, commitString)
+
+	v.View.SetCursor(x, y)
+	v.View.SetOrigin(0, oY)
 }
 
 func moveCursor(x, y int) func(*gocui.Gui, *gocui.View) error {
@@ -109,6 +115,33 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 
 func toggleSelection(v *MainView) func(*gocui.Gui, *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
+		_, y := v.View.Cursor()
+		i := v.commit.LineMap[y]
+		switch node := i.(type) {
+		case *File:
+			node.Selected.Toggle()
+			node.ForEachNode(
+				func(f *File, c *Chunk) error {
+					c.Selected = node.Selected
+					return nil
+				},
+				func(f *File, c *Chunk, l *Line) error {
+					l.Selected = node.Selected
+					return nil
+				},
+			)
+		case *Chunk:
+			node.Selected.Toggle()
+			node.ForEachNode(func(f *File, c *Chunk, l *Line) error {
+				l.Selected = node.Selected
+				return nil
+			})
+			node.Parent.UpdateSelection()
+		case *Line:
+			node.Selected.Toggle()
+			node.Parent.UpdateSelection()
+		}
+		v.printContent()
 		return nil
 	}
 }
