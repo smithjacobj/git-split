@@ -137,7 +137,13 @@ func (commit *Commit) String() string {
 			commit.LineMap = append(commit.LineMap, l)
 
 			fmt.Fprint(sb, k_DisplayTab, k_DisplayTab)
-			fmt.Fprintf(sb, "%s %s %s", k_MissingSpacer, l.Selected.String(), l.String())
+			lineColor := color.FgWhite
+			if l.Op == gitdiff.OpAdd {
+				lineColor = color.FgGreen
+			} else if l.Op == gitdiff.OpDelete {
+				lineColor = color.FgRed
+			}
+			fmt.Fprintf(sb, "%s %s \u001b[%dm%s\u001b[%dm", k_MissingSpacer, l.Selected.String(), lineColor, l.String(), color.FgWhite)
 			return nil
 		},
 	)
