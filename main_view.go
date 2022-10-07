@@ -92,9 +92,13 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 		case *File:
 			node.Expanded = state
 		case *Chunk:
-			node.Expanded = state
+			if state == Collapsed && node.Expanded == Collapsed {
+				// if already collapsed, go up to parent
+				y = node.Parent.LineNumber
+			} else {
+				node.Expanded = state
+			}
 		case *Line:
-			node.Parent.Expanded = state
 			y = node.Parent.LineNumber
 		}
 		v.printContent()
