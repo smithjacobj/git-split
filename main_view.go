@@ -59,6 +59,12 @@ func (v *MainView) setKeybindings() error {
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModShift, moveCursor(0, 15)); err != nil {
 		return err
 	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModNone, setExpansionState(v, Collapsed)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModNone, setExpansionState(v, Expanded)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -66,12 +72,30 @@ func (v *MainView) printContent() {
 	v.View.Clear()
 	commitString := strings.TrimSpace(v.commit.String())
 	fmt.Fprint(v.View, commitString)
-
 }
 
-func moveCursor(x, y int) func(g *gocui.Gui, v *gocui.View) error {
+func moveCursor(x, y int) func(*gocui.Gui, *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		v.MoveCursor(x, y)
+		return nil
+	}
+}
+
+func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		x, y := v.View.Cursor()
+		i := v.commit.LineMap[y]
+		parentLine := 0
+		switch node := i.(type) {
+		case *File:
+			node.Expanded = state
+			parentLine = node.LineNumber
+		case *Chunk:
+			node.Expanded = state
+			parentLine = node.LineNumber
+		}
+		v.printContent()
+		v.View.SetCursor(x, parentLine)
 		return nil
 	}
 }

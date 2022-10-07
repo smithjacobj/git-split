@@ -6,10 +6,12 @@ import (
 	"strings"
 
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
+	"github.com/fatih/color"
 )
 
 const k_MissingSpacer = "   "
 const k_DisplayTab = "    "
+const k_StartExpanded = Expanded
 
 var errBreak = fmt.Errorf("break out of callback loop")
 
@@ -51,7 +53,10 @@ func (e ExpansionState) String() string {
 }
 
 type Commit struct {
-	Files       []*File
+	Files []*File
+	// LineMap maps line numbers (cursor positions) to files.
+	LineMap []interface{}
+	// Description includes the commit details, like commit message, etc.
 	Description string
 }
 
@@ -95,10 +100,14 @@ func (c *Commit) ForEachNode(ffn FileFunc, cfn ChunkFunc, lfn LineFunc) error {
 	return nil
 }
 
-func (c *Commit) String() string {
+func (commit *Commit) String() string {
 	sb := &strings.Builder{}
-	c.ForEachNode(
+	commit.LineMap = commit.LineMap[:0]
+	commit.ForEachNode(
 		func(f *File) error {
+			f.LineNumber = len(commit.LineMap)
+			commit.LineMap = append(commit.LineMap, f)
+
 			fmt.Fprint(sb, f.Expanded.String())
 			fmt.Fprint(sb, " ", f.Selected.String())
 			if len(f.OldName) == 0 {
@@ -120,14 +129,19 @@ func (c *Commit) String() string {
 				return errBreak
 			}
 
+			c.LineNumber = len(commit.LineMap)
+			commit.LineMap = append(commit.LineMap, c)
+
 			fmt.Fprint(sb, k_DisplayTab, c.Expanded.String())
-			fmt.Fprintf(sb, " %s %s\n", c.Selected.String(), c.Header())
+			fmt.Fprintf(sb, " %s %s\n", c.Selected.String(), color.CyanString(c.Header()))
 			return nil
 		},
 		func(f *File, c *Chunk, l *Line) error {
 			if f.Expanded == Collapsed || c.Expanded == Collapsed {
 				return errBreak
 			}
+
+			commit.LineMap = append(commit.LineMap, l)
 
 			fmt.Fprint(sb, k_DisplayTab, k_DisplayTab)
 			fmt.Fprintf(sb, "%s %s %s", k_MissingSpacer, l.Selected.String(), l.String())
@@ -139,21 +153,25 @@ func (c *Commit) String() string {
 
 type File struct {
 	*gitdiff.File
-	Selected SelectionState
-	Expanded ExpansionState
-	Chunks   []*Chunk
+	Selected   SelectionState
+	Expanded   ExpansionState
+	LineNumber int
+	Chunks     []*Chunk
 }
 
 type Chunk struct {
 	*gitdiff.TextFragment
-	Selected SelectionState
-	Expanded ExpansionState
-	Lines    []*Line
+	Selected   SelectionState
+	Expanded   ExpansionState
+	LineNumber int
+	Parent     *File
+	Lines      []*Line
 }
 
 type Line struct {
 	gitdiff.Line
 	Selected SelectionState
+	Parent   *Chunk
 }
 
 func ParseCommit(r io.Reader) (commit *Commit, err error) {
@@ -164,13 +182,13 @@ func ParseCommit(r io.Reader) (commit *Commit, err error) {
 
 	commit = &Commit{Files: make([]*File, 0, len(files)), Description: desc}
 	for _, file := range files {
-		outFile := &File{File: file}
+		outFile := &File{File: file, Expanded: k_StartExpanded}
 		commit.Files = append(commit.Files, outFile)
 		for _, chunk := range file.TextFragments {
-			outChunk := &Chunk{TextFragment: chunk}
+			outChunk := &Chunk{TextFragment: chunk, Expanded: k_StartExpanded, Parent: outFile}
 			outFile.Chunks = append(outFile.Chunks, outChunk)
 			for _, line := range chunk.Lines {
-				outLine := &Line{Line: line}
+				outLine := &Line{Line: line, Parent: outChunk}
 				outChunk.Lines = append(outChunk.Lines, outLine)
 			}
 		}

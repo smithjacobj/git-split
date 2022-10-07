@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/awesome-gocui/gocui"
+	"github.com/fatih/color"
 )
 
 const k_HelpView = "help"
@@ -31,5 +32,16 @@ func LayoutHelpView(g *gocui.Gui) (v *HelpView, err error) {
 }
 
 func (v *HelpView) printContent() {
-	fmt.Fprintln(v.View, " a: select all  A: select none  q: abort  c: confirm  up/down: navigate changes  left/right: collapse/expand")
+	v.printKeybind("space", "toggle selection")
+	v.printKeybind("a", "select all")
+	v.printKeybind("A", "select none")
+	v.printKeybind("q", "abort")
+	v.printKeybind("c", "confirm")
+	v.printKeybind("up/down", "navigate")
+	v.printKeybind("left/right", "collapse/expand")
+}
+
+func (v *HelpView) printKeybind(key, usage string) {
+	fmt.Fprint(v.View, color.CyanString(key))
+	fmt.Fprintf(v.View, ": %s ", usage)
 }
