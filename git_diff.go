@@ -11,9 +11,10 @@ import (
 
 const k_MissingSpacer = "   "
 const k_DisplayTab = "    "
-const k_StartExpanded = Expanded
+const k_StartExpanded = Collapsed
 
 var errBreak = fmt.Errorf("break out of callback loop")
+var errContinue = fmt.Errorf("continue to next iteration of callback loop")
 
 type SelectionState int
 
@@ -83,6 +84,8 @@ func (c *Commit) ForEachNode(ffn FileFunc, cfn ChunkFunc, lfn LineFunc) error {
 			if err := ffn(file); err != nil {
 				if err == errBreak {
 					break
+				} else if err == errContinue {
+					continue
 				} else {
 					return err
 				}
@@ -126,7 +129,7 @@ func (commit *Commit) String() string {
 			commit.LineMap = append(commit.LineMap, c)
 
 			fmt.Fprint(sb, k_DisplayTab, c.Expanded.String())
-			fmt.Fprintf(sb, " %s %s\n", c.Selected.String(), color.CyanString(c.OriginalHeader()))
+			fmt.Fprintf(sb, " %s %s\n", c.Selected.String(), color.CyanString(c.Header()))
 			return nil
 		},
 		func(f *File, c *Chunk, l *Line) error {
@@ -158,6 +161,40 @@ func (commit *Commit) String() string {
 	return sb.String()
 }
 
+func (c *Commit) AsPatchString() string {
+	sb := &strings.Builder{}
+
+	c.ForEachNode(
+		func(f *File) error {
+			if f.Selected == Deselected {
+				return errContinue
+			}
+
+			fmt.Fprint(sb, f.Header())
+			return nil
+		},
+		func(_ *File, c *Chunk) error {
+			if c.Selected == Deselected {
+				return errContinue
+			}
+
+			c.UpdateHeader()
+			fmt.Fprintln(sb, c.Header())
+			return nil
+		},
+		func(_ *File, _ *Chunk, l *Line) error {
+			if l.Selected == Deselected {
+				return errContinue
+			}
+
+			fmt.Fprint(sb, l.String())
+			return nil
+		},
+	)
+
+	return sb.String()
+}
+
 type File struct {
 	*gitdiff.File
 	Selected   SelectionState
@@ -172,6 +209,8 @@ func (file *File) ForEachNode(cfn ChunkFunc, lfn LineFunc) error {
 			if err := cfn(file, chunk); err != nil {
 				if err == errBreak {
 					break
+				} else if err == errContinue {
+					continue
 				} else {
 					return err
 				}
@@ -205,6 +244,44 @@ func (file *File) UpdateSelection() {
 	}
 }
 
+func (file *File) Header() string {
+	sb := &strings.Builder{}
+
+	if file.IsNew {
+		fmt.Fprintf(sb, "diff --git a/%s b/%s\n", file.NewName, file.NewName)
+	} else if file.IsDelete {
+		fmt.Fprintf(sb, "diff --git a/%s b/%s\n", file.OldName, file.OldName)
+	} else {
+		fmt.Fprintf(sb, "diff --git a/%s b/%s\n", file.OldName, file.NewName)
+	}
+
+	if file.IsCopy {
+		fmt.Fprintf(sb, "copy from %s\n", file.OldName)
+		fmt.Fprintf(sb, "copy to %s\n", file.NewName)
+	} else if file.IsRename {
+		fmt.Fprintf(sb, "rename from %s\n", file.OldName)
+		fmt.Fprintf(sb, "rename to %s\n", file.NewName)
+	} else if file.IsNew {
+		fmt.Fprintf(sb, "new file mode %06o\n", file.NewMode)
+		fmt.Fprint(sb, "--- /dev/null\n")
+		fmt.Fprintf(sb, "+++ b/%s\n", file.NewName)
+	} else if file.IsDelete {
+		fmt.Fprintf(sb, "deleted file mode %06o\n", file.OldMode)
+		fmt.Fprintf(sb, "--- a/%s\n", file.OldName)
+		fmt.Fprint(sb, "+++ /dev/null\n")
+	} else {
+		if file.NewMode != 0 && file.OldMode != file.NewMode {
+			fmt.Fprintf(sb, "old mode %06o\n", file.OldMode)
+			fmt.Fprintf(sb, "new mode %06o\n", file.NewMode)
+		}
+		fmt.Fprintf(sb, "--- a/%s\n", file.OldName)
+		fmt.Fprintf(sb, "+++ b/%s\n", file.NewName)
+		// we leave out object IDs as splits should never need to 3-way merge and the new OID
+		// will be invalid until we create the new commit.
+	}
+	return sb.String()
+}
+
 type Chunk struct {
 	*gitdiff.TextFragment
 	Selected            SelectionState
@@ -221,6 +298,8 @@ func (chunk *Chunk) ForEachNode(lfn LineFunc) error {
 			if err := lfn(chunk.Parent, chunk, line); err != nil {
 				if err == errBreak {
 					break
+				} else if err == errContinue {
+					continue
 				} else {
 					return err
 				}
@@ -255,16 +334,24 @@ func (chunk *Chunk) UpdateSelection() {
 	chunk.Parent.UpdateSelection()
 }
 
-func (chunk *Chunk) OriginalHeader() string {
-	return chunk.TextFragment.Header()
-}
+func (chunk *Chunk) UpdateHeader() {
+	if chunk.Selected == Selected {
+		// 100% selected, no changes needed to chunk
+		return
+	}
 
-func (chunk *Chunk) Header() {
-	// TODO:
-	// convert deselected deleted lines to context ops
-	// remove deselected added lines
-	// fix header
-	// apply and get a new git diff between new commit and target state commit
+	chunk.ForEachNode(func(_ *File, _ *Chunk, l *Line) error {
+		if l.Op == gitdiff.OpDelete && l.Selected == Deselected {
+			// swapping removed to context means the chunk header minus count stays the same
+			l.Op = gitdiff.OpContext
+		} else if l.Op == gitdiff.OpAdd && l.Selected == Deselected {
+			// however, removing added lines reduces the chunk header added count by one (but does
+			// not change the start). We won't remove the line from the data just because it's more
+			// efficient to skip it later when we output the string.
+			chunk.LinesAdded--
+		}
+		return nil
+	})
 }
 
 type Line struct {

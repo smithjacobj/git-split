@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/awesome-gocui/gocui"
@@ -67,6 +68,9 @@ func (v *MainView) setKeybindings() error {
 		return err
 	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeySpace, gocui.ModNone, toggleSelection(v)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), 'c', gocui.ModNone, confirm(v)); err != nil {
 		return err
 	}
 	return nil
@@ -146,5 +150,13 @@ func toggleSelection(v *MainView) func(*gocui.Gui, *gocui.View) error {
 		}
 		v.printContent()
 		return nil
+	}
+}
+
+func confirm(v *MainView) func(*gocui.Gui, *gocui.View) error {
+	return func(_ *gocui.Gui, _ *gocui.View) error {
+		f, _ := os.Create("test.patch")
+		f.WriteString(v.commit.AsPatchString())
+		return gocui.ErrQuit
 	}
 }
