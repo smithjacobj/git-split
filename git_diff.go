@@ -103,13 +103,13 @@ func (commit *Commit) String() string {
 
 			fmt.Fprint(sb, f.Expanded.String())
 			fmt.Fprint(sb, " ", f.Selected.String())
-			if len(f.OldName) == 0 {
+			if f.IsNew {
 				fmt.Fprint(sb, " (NEW FILE)")
 			} else {
 				fmt.Fprint(sb, " ", f.OldName)
 			}
 			fmt.Fprint(sb, " => ")
-			if len(f.NewName) == 0 {
+			if f.IsDelete {
 				fmt.Fprint(sb, "(DELETED)")
 			} else {
 				fmt.Fprint(sb, f.NewName)
@@ -126,7 +126,7 @@ func (commit *Commit) String() string {
 			commit.LineMap = append(commit.LineMap, c)
 
 			fmt.Fprint(sb, k_DisplayTab, c.Expanded.String())
-			fmt.Fprintf(sb, " %s %s\n", c.Selected.String(), color.CyanString(c.Header()))
+			fmt.Fprintf(sb, " %s %s\n", c.Selected.String(), color.CyanString(c.OriginalHeader()))
 			return nil
 		},
 		func(f *File, c *Chunk, l *Line) error {
@@ -253,6 +253,18 @@ func (chunk *Chunk) UpdateSelection() {
 		chunk.Selected = Deselected
 	}
 	chunk.Parent.UpdateSelection()
+}
+
+func (chunk *Chunk) OriginalHeader() string {
+	return chunk.TextFragment.Header()
+}
+
+func (chunk *Chunk) Header() {
+	// TODO:
+	// convert deselected deleted lines to context ops
+	// remove deselected added lines
+	// fix header
+	// apply and get a new git diff between new commit and target state commit
 }
 
 type Line struct {
