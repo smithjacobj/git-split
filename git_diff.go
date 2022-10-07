@@ -78,24 +78,7 @@ func (c *Commit) ForEachNode(ffn FileFunc, cfn ChunkFunc, lfn LineFunc) error {
 				return err
 			}
 		}
-		for _, chunk := range file.Chunks {
-			if err := cfn(file, chunk); err != nil {
-				if err == errBreak {
-					break
-				} else {
-					return err
-				}
-			}
-			for _, line := range chunk.Lines {
-				if err := lfn(file, chunk, line); err != nil {
-					if err == errBreak {
-						break
-					} else {
-						return err
-					}
-				}
-			}
-		}
+		file.ForEachNode(cfn, lfn)
 	}
 	return nil
 }
@@ -159,6 +142,20 @@ type File struct {
 	Chunks     []*Chunk
 }
 
+func (file *File) ForEachNode(cfn ChunkFunc, lfn LineFunc) error {
+	for _, chunk := range file.Chunks {
+		if err := cfn(file, chunk); err != nil {
+			if err == errBreak {
+				break
+			} else {
+				return err
+			}
+		}
+		chunk.ForEachNode(lfn)
+	}
+	return nil
+}
+
 type Chunk struct {
 	*gitdiff.TextFragment
 	Selected   SelectionState
@@ -166,6 +163,19 @@ type Chunk struct {
 	LineNumber int
 	Parent     *File
 	Lines      []*Line
+}
+
+func (chunk *Chunk) ForEachNode(lfn LineFunc) error {
+	for _, line := range chunk.Lines {
+		if err := lfn(chunk.Parent, chunk, line); err != nil {
+			if err == errBreak {
+				break
+			} else {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 type Line struct {

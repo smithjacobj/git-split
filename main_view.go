@@ -65,6 +65,9 @@ func (v *MainView) setKeybindings() error {
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModNone, setExpansionState(v, Expanded)); err != nil {
 		return err
 	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeySpace, gocui.ModNone, toggleSelection(v)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -85,17 +88,23 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		x, y := v.View.Cursor()
 		i := v.commit.LineMap[y]
-		parentLine := 0
 		switch node := i.(type) {
 		case *File:
 			node.Expanded = state
-			parentLine = node.LineNumber
 		case *Chunk:
 			node.Expanded = state
-			parentLine = node.LineNumber
+		case *Line:
+			node.Parent.Expanded = state
+			y = node.Parent.LineNumber
 		}
 		v.printContent()
-		v.View.SetCursor(x, parentLine)
+		v.View.SetCursor(x, y)
+		return nil
+	}
+}
+
+func toggleSelection(v *MainView) func(*gocui.Gui, *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
 		return nil
 	}
 }
