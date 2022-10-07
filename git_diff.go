@@ -143,7 +143,15 @@ func (commit *Commit) String() string {
 			} else if l.Op == gitdiff.OpDelete {
 				lineColor = color.FgRed
 			}
-			fmt.Fprintf(sb, "%s %s \u001b[%dm%s\u001b[%dm", k_MissingSpacer, l.Selected.String(), lineColor, l.String(), color.FgWhite)
+			// aligns as there's no collapse/expand on lines
+			fmt.Fprint(sb, k_MissingSpacer, " ")
+			if l.Op == gitdiff.OpContext {
+				// selecting or deselecting context lines is pointless
+				fmt.Fprint(sb, k_MissingSpacer)
+			} else {
+				fmt.Fprint(sb, l.Selected.String())
+			}
+			fmt.Fprintf(sb, " \u001b[%dm%s\u001b[%dm", lineColor, l.String(), color.FgWhite)
 			return nil
 		},
 	)
@@ -199,11 +207,12 @@ func (file *File) UpdateSelection() {
 
 type Chunk struct {
 	*gitdiff.TextFragment
-	Selected   SelectionState
-	Expanded   ExpansionState
-	LineNumber int
-	Parent     *File
-	Lines      []*Line
+	Selected            SelectionState
+	Expanded            ExpansionState
+	LineNumber          int
+	Parent              *File
+	Lines               []*Line
+	NonContextLineCount int
 }
 
 func (chunk *Chunk) ForEachNode(lfn LineFunc) error {
@@ -226,15 +235,17 @@ func (chunk *Chunk) UpdateSelection() {
 	partiallySelectedLineCount := 0
 	chunk.ForEachNode(
 		func(f *File, c *Chunk, l *Line) error {
-			if l.Selected == Selected {
-				selectedLineCount++
-			} else if l.Selected == PartiallySelected {
-				partiallySelectedLineCount++
+			if l.Op != gitdiff.OpContext {
+				if l.Selected == Selected {
+					selectedLineCount++
+				} else if l.Selected == PartiallySelected {
+					partiallySelectedLineCount++
+				}
 			}
 			return nil
 		},
 	)
-	if selectedLineCount == len(chunk.Lines) {
+	if selectedLineCount == chunk.NonContextLineCount {
 		chunk.Selected = Selected
 	} else if selectedLineCount > 0 || partiallySelectedLineCount > 0 {
 		chunk.Selected = PartiallySelected
@@ -266,6 +277,9 @@ func ParseCommit(r io.Reader) (commit *Commit, err error) {
 			for _, line := range chunk.Lines {
 				outLine := &Line{Line: line, Parent: outChunk}
 				outChunk.Lines = append(outChunk.Lines, outLine)
+				if line.Op != gitdiff.OpContext {
+					outChunk.NonContextLineCount++
+				}
 			}
 		}
 	}

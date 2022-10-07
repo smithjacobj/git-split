@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/awesome-gocui/gocui"
+	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
 const k_MainView = "main"
@@ -138,8 +139,10 @@ func toggleSelection(v *MainView) func(*gocui.Gui, *gocui.View) error {
 			})
 			node.Parent.UpdateSelection()
 		case *Line:
-			node.Selected.Toggle()
-			node.Parent.UpdateSelection()
+			if node.Op != gitdiff.OpContext {
+				node.Selected.Toggle()
+				node.Parent.UpdateSelection()
+			}
 		}
 		v.printContent()
 		return nil
