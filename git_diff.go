@@ -163,6 +163,7 @@ func (commit *Commit) String() string {
 
 func (c *Commit) AsPatchString() string {
 	sb := &strings.Builder{}
+	endsWithNewline := false
 
 	c.ForEachNode(
 		func(f *File) error {
@@ -178,7 +179,7 @@ func (c *Commit) AsPatchString() string {
 				return errContinue
 			}
 
-			c.UpdateHeader()
+			// we will use the outdated chunk line counts and use git-apply --recount
 			fmt.Fprintln(sb, c.Header())
 			return nil
 		},
@@ -187,12 +188,28 @@ func (c *Commit) AsPatchString() string {
 				return errContinue
 			}
 
-			fmt.Fprint(sb, l.String())
+			s := l.String()
+			endsWithNewline = strings.HasSuffix(s, "\n")
+			fmt.Fprint(sb, s)
 			return nil
 		},
 	)
 
+	if !endsWithNewline {
+		fmt.Fprint(sb, "\n\\ No newline at end of file")
+	}
+
 	return sb.String()
+}
+
+func (c *Commit) GetSelectedFiles() []string {
+	ss := make([]string, 0, len(c.Files))
+	for _, file := range c.Files {
+		if file.Selected != Deselected {
+			ss = append(ss, file.NewName)
+		}
+	}
+	return ss
 }
 
 type File struct {
@@ -332,26 +349,6 @@ func (chunk *Chunk) UpdateSelection() {
 		chunk.Selected = Deselected
 	}
 	chunk.Parent.UpdateSelection()
-}
-
-func (chunk *Chunk) UpdateHeader() {
-	if chunk.Selected == Selected {
-		// 100% selected, no changes needed to chunk
-		return
-	}
-
-	chunk.ForEachNode(func(_ *File, _ *Chunk, l *Line) error {
-		if l.Op == gitdiff.OpDelete && l.Selected == Deselected {
-			// swapping removed to context means the chunk header minus count stays the same
-			l.Op = gitdiff.OpContext
-		} else if l.Op == gitdiff.OpAdd && l.Selected == Deselected {
-			// however, removing added lines reduces the chunk header added count by one (but does
-			// not change the start). We won't remove the line from the data just because it's more
-			// efficient to skip it later when we output the string.
-			chunk.LinesAdded--
-		}
-		return nil
-	})
 }
 
 type Line struct {

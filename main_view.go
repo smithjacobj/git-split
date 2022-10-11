@@ -11,6 +11,8 @@ import (
 
 const k_MainView = "main"
 
+var ErrConfirm = fmt.Errorf("confirm changes and quit")
+
 type MainView struct {
 	*gocui.Gui
 	*gocui.View
@@ -55,10 +57,16 @@ func (v *MainView) setKeybindings() error {
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowUp, gocui.ModShift, moveCursor(0, -15)); err != nil {
 		return err
 	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyPgup, gocui.ModNone, moveCursor(0, -15)); err != nil {
+		return err
+	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModNone, moveCursor(0, 1)); err != nil {
 		return err
 	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModShift, moveCursor(0, 15)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyPgdn, gocui.ModNone, moveCursor(0, 15)); err != nil {
 		return err
 	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModNone, setExpansionState(v, Collapsed)); err != nil {
@@ -157,6 +165,6 @@ func confirm(v *MainView) func(*gocui.Gui, *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
 		f, _ := os.Create("test.patch")
 		f.WriteString(v.commit.AsPatchString())
-		return gocui.ErrQuit
+		return ErrConfirm
 	}
 }
