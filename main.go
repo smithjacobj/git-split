@@ -34,6 +34,8 @@ func init() {
 }
 
 func main() {
+	finishUp := false
+
 	// we can't operate on a repo with uncommitted changes, as we will need to move around the index.
 	if c, err := git.HasChanges(); err != nil {
 		color.Red(err.Error())
@@ -83,49 +85,85 @@ func main() {
 			// no more changes, quit
 			os.Exit(0)
 		}
-		commit.Description, err = git.ShowRefDescription(g_TargetRef)
+		commit.Description, err = git.FormatShowRefDescription(
+			g_TargetRef,
+			`# Original commit: %H
+# Author: %an <%ae>
+# Date:   %ad
+#
+# The original commit message is below. You may edit it as you see fit.
+
+%B`,
+		)
 		if err != nil {
 			log.Panicln(err)
 		}
 
-		g, err := gocui.NewGui(gocui.OutputNormal, false)
-		if err != nil {
-			log.Panicln(err)
-		}
-
-		g.SetManagerFunc(layoutFn(commit))
-		g.Cursor = true
-		g.FgColor = gocui.ColorWhite
-		g.BgColor = gocui.ColorBlack
-		g.SelBgColor = gocui.ColorWhite
-		g.SelFgColor = gocui.ColorBlack
-
-		if err := setGlobalKeybindings(g); err != nil {
-			log.Panicln(err)
-		}
-
-		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit && err != ErrConfirm {
-			log.Panicln(err)
-		} else if err == gocui.ErrQuit {
-			g.Close()
-			git.Checkout(originalBranchName)
-			os.Exit(0)
-		} else if err == ErrConfirm {
-			g.Close()
-
+		doOnConfirm := func() error {
 			git.ApplyPatch(strings.NewReader(commit.AsPatchString()))
 
 			files := commit.GetSelectedFiles()
 			if err = git.Add(files...); err != nil {
 				git.Checkout(originalBranchName)
-				log.Panicln(err)
+				return err
 			}
 			if err = git.Commit(commit.Description); err != nil {
 				git.Checkout(originalBranchName)
-				log.Panicln(err)
+				return err
 			}
 			if err = git.Amend(); err != nil {
 				git.Checkout(originalBranchName)
+				return err
+			}
+			return nil
+		}
+
+		if !finishUp {
+			g, err := gocui.NewGui(gocui.OutputNormal, false)
+			if err != nil {
+				log.Panicln(err)
+			}
+
+			g.SetManagerFunc(layoutFn(commit))
+			g.Cursor = true
+			g.FgColor = gocui.ColorWhite
+			g.BgColor = gocui.ColorBlack
+			g.SelBgColor = gocui.ColorWhite
+			g.SelFgColor = gocui.ColorBlack
+
+			if err := setGlobalKeybindings(g); err != nil {
+				log.Panicln(err)
+			}
+
+			if err := g.MainLoop(); err != nil && err != gocui.ErrQuit && err != ErrConfirm {
+				log.Panicln(err)
+			} else if err == gocui.ErrQuit {
+				g.Close()
+				git.Checkout(originalBranchName)
+				os.Exit(0)
+			} else if err == ErrConfirm {
+				g.Close()
+				if err := doOnConfirm(); err != nil {
+					log.Panicln(err)
+				}
+
+				if isDifferent, err := git.IsDifferent("HEAD", g_TargetRef); err != nil {
+					log.Panicln(err)
+				} else if isDifferent {
+					fmt.Print("Do you want to continue splitting? [Y/n]")
+					nextChar := []byte{0}
+					for nextChar[0] != 'y' && nextChar[0] != 'n' && nextChar[0] != '\n' {
+						if _, err := os.Stdin.Read(nextChar); err != nil {
+							log.Panicln(err)
+						}
+					}
+					if nextChar[0] == 'n' {
+						finishUp = true
+					}
+				}
+			}
+		} else {
+			if err := doOnConfirm(); err != nil {
 				log.Panicln(err)
 			}
 		}

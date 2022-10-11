@@ -13,9 +13,9 @@ import (
 // ShowRefDescription gets the description for the specified commit ref. If it succeeds, s contains
 // the description and err is nil. If it fails, s contains the error output and err contains the
 // error returned from Run().
-func ShowRefDescription(ref string) (s string, err error) {
+func FormatShowRefDescription(ref, format string) (s string, err error) {
 	buf := &bytes.Buffer{}
-	cmd := exec.Command("git", "show", ref, "--no-patch", "--no-color")
+	cmd := exec.Command("git", "show", ref, "--no-patch", "--no-color", fmt.Sprintf("--format=%s", format))
 	cmd.Stdout = buf
 	cmd.Stderr = buf
 
@@ -34,6 +34,16 @@ func Diff(ref1, ref2 string) (buf *bytes.Buffer, err error) {
 
 	err = cmd.Run()
 	return
+}
+
+func IsDifferent(ref1, ref2 string) (bool, error) {
+	buf, err := Diff(ref1, ref2)
+	if err != nil {
+		return true, err
+	} else if buf.Len() == 0 {
+		return false, nil
+	}
+	return true, nil
 }
 
 // ApplyPatch applies the patch in buf to the working tree but doesn't add or commit it.
