@@ -52,8 +52,7 @@ func ApplyPatch(r io.Reader) error {
 	cmd := exec.Command("git", "apply", "--recount", "-")
 	cmd.Stdin = r
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+	if output, err := cmd.CombinedOutput(); err != nil {
 		asExecuted := cmd.String()
 		return fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
 	}
@@ -96,6 +95,12 @@ func GetCurrentBranchName() (name string, err error) {
 	}
 }
 
+// BranchExists returns whether or not the specified branch name exists
+func BranchExists(name string) bool {
+	_, err := RevParse(name)
+	return err == nil
+}
+
 // Commit triggers a commit, bringing up the default editor with the specified message
 func Commit(message string) error {
 	cmd := exec.Command("git", "commit", "-F", "-")
@@ -120,22 +125,17 @@ func Amend() error {
 
 // Checkout the specified ref
 func Checkout(ref string) error {
-	cmd := exec.Command("git", "checkout", ref)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		asExecuted := cmd.String()
-		return fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
-	}
-	return nil
+	return git("checkout", ref)
 }
 
 // CreateAndSwitchToBranch creates a new branch and switches to it (`git checkout -b`)
 func CreateAndSwitchToBranch(branchName string) error {
-	cmd := exec.Command("git", "checkout", "-b", branchName)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		asExecuted := cmd.String()
-		return fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
-	}
-	return nil
+	return git("checkout", "-b", branchName)
+}
+
+// CreateBranch creates a branch at HEAD but doesn't switch to it
+func CreateBranch(branchName string) error {
+	return git("branch", branchName)
 }
 
 // RevParse gets the hash for a ref
@@ -152,11 +152,31 @@ func RevParse(ref string) (string, error) {
 // Add does a `git add`
 func Add(paths ...string) error {
 	arg := append([]string{"add", "--"}, paths...)
-	cmd := exec.Command("git", arg...)
+	return git(arg...)
+}
+
+// Rebase does a `git rebase`
+func Rebase(base, topic string) error {
+	return git("rebase", base, topic)
+}
+
+func git(args ...string) error {
+	cmd := exec.Command("git", args...)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		asExecuted := cmd.String()
 		return fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
 	}
 	return nil
+}
+
+func gitOutput(args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		asExecuted := cmd.String()
+		return "", fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
+	} else {
+		return string(output), nil
+	}
 }

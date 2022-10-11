@@ -60,18 +60,29 @@ func main() {
 	if err != nil {
 		log.Panicln(err)
 	}
-	branchName := originalBranchName + "-split"
 
-	if err := git.Checkout(g_StartRef); err != nil {
+	// this creates a branch that saves the original branch state
+	backupBranchNameBase := "git-split-backups/" + originalBranchName
+	backupBranchName := backupBranchNameBase
+	backupBranchNameNum := 0
+	for git.BranchExists(backupBranchName) {
+		backupBranchNameNum++
+		backupBranchName = fmt.Sprintf("%s.%d", backupBranchNameBase, backupBranchNameNum)
+	}
+	if err := git.CreateBranch(backupBranchName); err != nil {
 		log.Panicln(err)
 	}
-	if err := git.CreateAndSwitchToBranch(branchName); err != nil {
+
+	// move to the commit before the target commit
+	// FIXME: this doesn't take into account a potential 3-way merge situation, which may cause
+	// spurious results. Need to either detect and abort or find a way to manage it.
+	if err := git.Checkout(g_StartRef); err != nil {
 		log.Panicln(err)
 	}
 
 	for {
 		// get a patch format of the diff described by the selected commit
-		patch, err := git.Diff(branchName, g_TargetRef)
+		patch, err := git.Diff("HEAD", g_TargetRef)
 		fmt.Println(patch.String())
 		if err != nil {
 			log.Println(err)
@@ -82,7 +93,10 @@ func main() {
 		if err != nil {
 			log.Panicln(err)
 		} else if len(commit.Files) == 0 {
-			// no more changes, quit
+			// no more changes, rebase and quit
+			if err := git.Rebase("HEAD", originalBranchName); err != nil {
+				log.Panicln(err)
+			}
 			os.Exit(0)
 		}
 		commit.Description, err = git.FormatShowRefDescription(
