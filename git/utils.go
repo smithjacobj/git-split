@@ -145,7 +145,7 @@ func RevParse(ref string) (string, error) {
 		asExecuted := cmd.String()
 		return "", fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
 	} else {
-		return string(output), nil
+		return strings.TrimSpace(string(output)), nil
 	}
 }
 
@@ -168,15 +168,4 @@ func git(args ...string) error {
 		return fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
 	}
 	return nil
-}
-
-func gitOutput(args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		asExecuted := cmd.String()
-		return "", fmt.Errorf("%s: %s\n%s", err, asExecuted, output)
-	} else {
-		return string(output), nil
-	}
 }

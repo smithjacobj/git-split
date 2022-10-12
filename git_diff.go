@@ -63,7 +63,7 @@ func (e ExpansionState) String() string {
 
 type Commit struct {
 	Files []*File
-	// LineMap maps line numbers (cursor positions) to files.
+	// LineMap maps line numbers (cursor positions) to selection nodes (files, chunks, lines).
 	LineMap []interface{}
 	// Description includes the commit details, like commit message, etc.
 	Description string

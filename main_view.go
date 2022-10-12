@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/awesome-gocui/gocui"
@@ -79,6 +78,12 @@ func (v *MainView) setKeybindings() error {
 		return err
 	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), 'c', gocui.ModNone, confirm(v)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), 'a', gocui.ModNone, selectAll(v, Selected)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), 'A', gocui.ModNone, selectAll(v, Deselected)); err != nil {
 		return err
 	}
 	return nil
@@ -163,8 +168,26 @@ func toggleSelection(v *MainView) func(*gocui.Gui, *gocui.View) error {
 
 func confirm(v *MainView) func(*gocui.Gui, *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
-		f, _ := os.Create("test.patch")
-		f.WriteString(v.commit.AsPatchString())
 		return ErrConfirm
+	}
+}
+
+func selectAll(v *MainView, state SelectionState) func(*gocui.Gui, *gocui.View) error {
+	return func(_ *gocui.Gui, _ *gocui.View) error {
+		for _, file := range v.commit.Files {
+			file.Selected = state
+			file.ForEachNode(
+				func(_ *File, c *Chunk) error {
+					c.Selected = state
+					return nil
+				},
+				func(_ *File, _ *Chunk, l *Line) error {
+					l.Selected = state
+					return nil
+				},
+			)
+		}
+		v.printContent()
+		return nil
 	}
 }

@@ -12,24 +12,16 @@ import (
 	"github.com/smithjacobj/git-split/git"
 )
 
-const k_Debug = true
+const k_Debug = false
 
 var g_TargetRef string
-var g_StartRef string
 
 func init() {
 	flag.Parse()
 	if flag.NArg() == 0 {
 		g_TargetRef = "HEAD"
-		g_StartRef = "HEAD^"
 	} else if flag.NArg() == 1 {
 		g_TargetRef = flag.Arg(0)
-		// by default, select the first parent of this commit. In general, for merge commits, this
-		// is the branch that another ref or topic branch was merged into, e.g. main
-		g_StartRef = g_TargetRef + "^"
-	} else if flag.NArg() == 2 {
-		g_StartRef = flag.Arg(0)
-		g_TargetRef = flag.Arg(1)
 	}
 }
 
@@ -47,19 +39,23 @@ func main() {
 
 	// get a hash so the reference is valid when we move around.
 	var err error
-	if g_StartRef, err = git.RevParse(g_StartRef); err != nil {
-		log.Panicln(err)
-	}
 	if g_TargetRef, err = git.RevParse(g_TargetRef); err != nil {
 		log.Panicln(err)
 	}
 
-	// TODO: we will move the branch to the new leaf
-	// but for now we make an alternate branch and switch to it
+	// we compare with the leftmost parent, which is generally just the single commit prior, but in
+	// merge commits, is the target branch.
+	startRef, err := git.RevParse(g_TargetRef + "^")
+	if err != nil {
+		log.Panicln(err)
+	}
+
 	originalBranchName, err := git.GetCurrentBranchName()
 	if err != nil {
 		log.Panicln(err)
 	}
+
+	// check for a merge commit. Splitting doesn't really work
 
 	// this creates a branch that saves the original branch state
 	backupBranchNameBase := "git-split-backups/" + originalBranchName
@@ -74,16 +70,13 @@ func main() {
 	}
 
 	// move to the commit before the target commit
-	// FIXME: this doesn't take into account a potential 3-way merge situation, which may cause
-	// spurious results. Need to either detect and abort or find a way to manage it.
-	if err := git.Checkout(g_StartRef); err != nil {
+	if err := git.Checkout(startRef); err != nil {
 		log.Panicln(err)
 	}
 
 	for {
 		// get a patch format of the diff described by the selected commit
 		patch, err := git.Diff("HEAD", g_TargetRef)
-		fmt.Println(patch.String())
 		if err != nil {
 			log.Println(err)
 			log.Panicln(patch.String())
@@ -106,7 +99,6 @@ func main() {
 # Date:   %ad
 #
 # The original commit message is below. You may edit it as you see fit.
-
 %B`,
 		)
 		if err != nil {
@@ -164,7 +156,7 @@ func main() {
 				if isDifferent, err := git.IsDifferent("HEAD", g_TargetRef); err != nil {
 					log.Panicln(err)
 				} else if isDifferent {
-					fmt.Print("Do you want to continue splitting? [Y/n]")
+					fmt.Print("Do you want to continue splitting? [Y/n]: ")
 					nextChar := []byte{0}
 					for nextChar[0] != 'y' && nextChar[0] != 'n' && nextChar[0] != '\n' {
 						if _, err := os.Stdin.Read(nextChar); err != nil {
