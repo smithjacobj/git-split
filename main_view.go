@@ -71,7 +71,13 @@ func (v *MainView) setKeybindings() error {
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModNone, setExpansionState(v, Collapsed)); err != nil {
 		return err
 	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModShift, setExpansionAll(v, Collapsed)); err != nil {
+		return err
+	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModNone, setExpansionState(v, Expanded)); err != nil {
+		return err
+	}
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModShift, setExpansionAll(v, Expanded)); err != nil {
 		return err
 	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeySpace, gocui.ModNone, toggleSelection(v)); err != nil {
@@ -127,6 +133,24 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 		}
 		v.printContent()
 		v.View.SetCursor(x, y)
+		return nil
+	}
+}
+
+func setExpansionAll(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.View) error {
+	return func(_ *gocui.Gui, _ *gocui.View) error {
+		v.commit.ForEachNode(
+			func(f *File) error {
+				f.Expanded = state
+				return nil
+			},
+			func(_ *File, c *Chunk) error {
+				c.Expanded = state
+				return nil
+			},
+			nil,
+		)
+		v.printContent()
 		return nil
 	}
 }
