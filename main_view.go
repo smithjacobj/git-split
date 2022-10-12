@@ -120,16 +120,26 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 		i := v.commit.LineMap[y]
 		switch node := i.(type) {
 		case *File:
-			node.Expanded = state
+			if state == Expanded && node.Expanded == Expanded {
+				// if already expanded, go to first child
+				y++
+			} else {
+				node.Expanded = state
+			}
 		case *Chunk:
 			if state == Collapsed && node.Expanded == Collapsed {
 				// if already collapsed, go up to parent
 				y = node.Parent.LineNumber
+			} else if state == Expanded && node.Expanded == Expanded {
+				// if already expanded, go to first child
+				y++
 			} else {
 				node.Expanded = state
 			}
 		case *Line:
-			y = node.Parent.LineNumber
+			if state == Collapsed {
+				y = node.Parent.LineNumber
+			}
 		}
 		v.printContent()
 		v.View.SetCursor(x, y)
@@ -139,6 +149,8 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 
 func setExpansionAll(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
+		x, y := v.View.Cursor()
+		i := v.commit.LineMap[y]
 		v.commit.ForEachNode(
 			func(f *File) error {
 				f.Expanded = state
@@ -151,6 +163,17 @@ func setExpansionAll(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.
 			nil,
 		)
 		v.printContent()
+
+		if state == Collapsed {
+			// in this case we want to jump to the file that contained the previously-selected line
+			switch node := i.(type) {
+			case *Chunk:
+				y = node.Parent.LineNumber
+			case *Line:
+				y = node.Parent.Parent.LineNumber
+			}
+			v.View.SetCursor(x, y)
+		}
 		return nil
 	}
 }
