@@ -163,7 +163,6 @@ func (commit *Commit) String() string {
 
 func (c *Commit) AsPatchString() string {
 	sb := &strings.Builder{}
-	endsWithNewline := false
 
 	c.ForEachNode(
 		func(f *File) error {
@@ -189,15 +188,13 @@ func (c *Commit) AsPatchString() string {
 			}
 
 			s := l.String()
-			endsWithNewline = strings.HasSuffix(s, "\n")
 			fmt.Fprint(sb, s)
+			if l.NoEOL() {
+				fmt.Fprint(sb, "\n\\ No newline at end of file\n")
+			}
 			return nil
 		},
 	)
-
-	if !endsWithNewline {
-		fmt.Fprint(sb, "\n\\ No newline at end of file")
-	}
 
 	return sb.String()
 }

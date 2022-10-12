@@ -12,7 +12,11 @@ import (
 	"github.com/smithjacobj/git-split/git"
 )
 
-const k_Debug = false
+const (
+	k_Debug                 = false // default = false
+	k_Debug_RevertOnError   = true  // default = true
+	k_Debug_DumpPatchToFile = false // default = false
+)
 
 var g_TargetRef string
 
@@ -106,19 +110,39 @@ func main() {
 		}
 
 		doOnConfirm := func() error {
-			git.ApplyPatch(strings.NewReader(commit.AsPatchString()))
+			patch := commit.AsPatchString()
+			if k_Debug_DumpPatchToFile {
+				f, err := os.CreateTemp("", "git-split.patch")
+				if err != nil {
+					log.Panicln(err)
+				}
+				f.WriteString(patch)
+			}
+
+			if err = git.ApplyPatch(strings.NewReader(patch)); err != nil {
+				if k_Debug_RevertOnError {
+					git.Checkout(originalBranchName)
+				}
+				return err
+			}
 
 			files := commit.GetSelectedFiles()
 			if err = git.Add(files...); err != nil {
-				git.Checkout(originalBranchName)
+				if k_Debug_RevertOnError {
+					git.Checkout(originalBranchName)
+				}
 				return err
 			}
 			if err = git.Commit(commit.Description); err != nil {
-				git.Checkout(originalBranchName)
+				if k_Debug_RevertOnError {
+					git.Checkout(originalBranchName)
+				}
 				return err
 			}
 			if err = git.Amend(); err != nil {
-				git.Checkout(originalBranchName)
+				if k_Debug_RevertOnError {
+					git.Checkout(originalBranchName)
+				}
 				return err
 			}
 			return nil
