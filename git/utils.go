@@ -138,6 +138,11 @@ func CreateBranch(branchName string) error {
 	return git("branch", branchName)
 }
 
+// ForceDeleteBranch force-deletes the specified branch
+func ForceDeleteBranch(branchName string) error {
+	return git("branch", "-D", branchName)
+}
+
 // RevParse gets the hash for a ref
 func RevParse(ref string) (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--verify", ref)

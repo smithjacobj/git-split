@@ -146,6 +146,9 @@ func main() {
 			} else if err == gocui.ErrQuit {
 				g.Close()
 				git.Checkout(originalBranchName)
+				// this is the ONLY place we delete a branch, the unneeded backup branch because we
+				// aborted.
+				git.ForceDeleteBranch(backupBranchName)
 				os.Exit(0)
 			} else if err == ErrConfirm {
 				g.Close()
