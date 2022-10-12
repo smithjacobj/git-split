@@ -174,19 +174,20 @@ func confirm(v *MainView) func(*gocui.Gui, *gocui.View) error {
 
 func selectAll(v *MainView, state SelectionState) func(*gocui.Gui, *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
-		for _, file := range v.commit.Files {
-			file.Selected = state
-			file.ForEachNode(
-				func(_ *File, c *Chunk) error {
-					c.Selected = state
-					return nil
-				},
-				func(_ *File, _ *Chunk, l *Line) error {
-					l.Selected = state
-					return nil
-				},
-			)
-		}
+		v.commit.ForEachNode(
+			func(f *File) error {
+				f.Selected = state
+				return nil
+			},
+			func(_ *File, c *Chunk) error {
+				c.Selected = state
+				return nil
+			},
+			func(_ *File, _ *Chunk, l *Line) error {
+				l.Selected = state
+				return nil
+			},
+		)
 		v.printContent()
 		return nil
 	}
