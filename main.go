@@ -9,7 +9,7 @@ import (
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/fatih/color"
-	"github.com/smithjacobj/git-split/git"
+	"github.com/smithjacobj/go-git-utils"
 )
 
 const (
