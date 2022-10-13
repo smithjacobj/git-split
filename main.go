@@ -103,7 +103,9 @@ func main() {
 # Date:   %ad
 #
 # The original commit message is below. You may edit it as you see fit.
-%B`,
+%B
+
+`,
 		)
 		if err != nil {
 			log.Panicln(err)
