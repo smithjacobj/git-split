@@ -183,11 +183,18 @@ func (c *Commit) AsPatchString() string {
 			return nil
 		},
 		func(_ *File, _ *Chunk, l *Line) error {
+			s := l.String()
+
 			if l.Selected == Deselected {
-				return errContinue
+				if l.Op == gitdiff.OpAdd {
+					return errContinue
+				} else if l.Op == gitdiff.OpDelete {
+					// removing OpDeletes makes the patch fail, so we change them into context lines
+					// for patches.
+					s = gitdiff.OpContext.String() + l.Line.Line
+				}
 			}
 
-			s := l.String()
 			fmt.Fprint(sb, s)
 			if l.NoEOL() {
 				fmt.Fprint(sb, "\n\\ No newline at end of file\n")

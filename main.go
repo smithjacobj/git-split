@@ -15,7 +15,7 @@ import (
 const (
 	k_Debug                 = false // default = false
 	k_Debug_RevertOnError   = true  // default = true
-	k_Debug_DumpPatchToFile = false // default = false
+	k_Debug_DumpPatchToFile = true  // default = false
 )
 
 var g_TargetRef string
@@ -114,7 +114,7 @@ func main() {
 		doOnConfirm := func() error {
 			patch := commit.AsPatchString()
 			if k_Debug_DumpPatchToFile {
-				f, err := os.CreateTemp("", "git-split.patch")
+				f, err := os.CreateTemp("", "git-split*.patch")
 				if err != nil {
 					log.Panicln(err)
 				}
