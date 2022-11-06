@@ -50,22 +50,22 @@ func (v *MainView) SetCommit(c *Commit) {
 }
 
 func (v *MainView) setKeybindings() error {
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowUp, gocui.ModNone, moveCursor(0, -1)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowUp, gocui.ModNone, moveCursor(v, -1)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowUp, gocui.ModShift, moveCursor(0, -15)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowUp, gocui.ModShift, moveCursor(v, -15)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyPgup, gocui.ModNone, moveCursor(0, -15)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyPgup, gocui.ModNone, moveCursor(v, -15)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModNone, moveCursor(0, 1)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModNone, moveCursor(v, 1)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModShift, moveCursor(0, 15)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowDown, gocui.ModShift, moveCursor(v, 15)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyPgdn, gocui.ModNone, moveCursor(0, 15)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyPgdn, gocui.ModNone, moveCursor(v, 15)); err != nil {
 		return err
 	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModNone, setExpansionState(v, Collapsed)); err != nil {
@@ -107,9 +107,43 @@ func (v *MainView) printContent() {
 	v.View.SetOrigin(0, oY)
 }
 
-func moveCursor(x, y int) func(*gocui.Gui, *gocui.View) error {
-	return func(g *gocui.Gui, v *gocui.View) error {
-		v.MoveCursor(x, y)
+func fixScroll(v *gocui.View) {
+	_, sy := v.Size()
+	_, cy := v.Cursor()
+	ox, oy := v.Origin()
+	if cy < oy {
+		v.SetOrigin(ox, cy)
+	} else if cy > oy+sy-2 {
+		v.SetOrigin(ox, cy-sy+1)
+	}
+}
+
+func moveCursor(v *MainView, dy int) func(*gocui.Gui, *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		_, cy := v.View.Cursor()
+		cy += dy
+		d1y := 1
+		if dy < 0 {
+			d1y = -1
+		}
+	loop:
+		for {
+			if cy >= len(v.commit.LineMap) || cy < 0 {
+				return nil
+			}
+			switch val := v.commit.LineMap[cy].(type) {
+			case *Line:
+				if val.Op == gitdiff.OpContext {
+					cy += d1y
+				} else {
+					break loop
+				}
+			default:
+				break loop
+			}
+		}
+		v.View.SetCursor(0, cy)
+		fixScroll(v.View)
 		return nil
 	}
 }
@@ -143,6 +177,7 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 		}
 		v.printContent()
 		v.View.SetCursor(x, y)
+		fixScroll(v.View)
 		return nil
 	}
 }
@@ -174,6 +209,7 @@ func setExpansionAll(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.
 			}
 			v.View.SetCursor(x, y)
 		}
+		fixScroll(v.View)
 		return nil
 	}
 }
