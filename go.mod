@@ -6,7 +6,7 @@ require (
 	github.com/awesome-gocui/gocui v1.1.1-0.20220726193820-384f06fbdddf
 	github.com/bluekeyes/go-gitdiff v0.7.0
 	github.com/fatih/color v1.13.0
-	github.com/smithjacobj/go-git-utils v0.0.0-20221026044151-fc256699f1b8
+	github.com/smithjacobj/go-git-utils v0.0.0-20221104065301-277ae4622746
 )
 
 require (

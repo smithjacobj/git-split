@@ -57,9 +57,15 @@ func main() {
 	originalBranchName, err := git.GetCurrentBranchName()
 	if err != nil {
 		log.Panicln(err)
+	} else if len(originalBranchName) == 0 {
+		log.Panicln("splitting detached heads is not supported; switch to or create a branch")
+	} else if isAncestor, err := git.IsAncestor(g_TargetRef, originalBranchName); err != nil {
+		log.Panicln(err)
+	} else if !isAncestor {
+		// TODO: Cross-branch support is questionable - how do we determine a child branch when there
+		// could be many? If only one, OK. If manually specified, OK.
+		log.Panicln("selected commit is not an ancestor of the active branch. ensure that the intended target branch is active")
 	}
-
-	// check for a merge commit. Splitting doesn't really work
 
 	// this creates a branch that saves the original branch state
 	backupBranchNameBase := "git-split-backups/" + originalBranchName
