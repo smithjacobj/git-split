@@ -12,15 +12,18 @@ import (
 	"github.com/smithjacobj/go-git-utils"
 )
 
-const (
-	k_Debug                 = false // default = false
-	k_Debug_RevertOnError   = true  // default = true
-	k_Debug_DumpPatchToFile = false // default = false
+var (
+	g_Debug_ShowDebugView     = false
+	g_Debug_DontRevertOnError = false
+	g_Debug_DumpPatchToFile   = false
 )
 
 var g_TargetRef string
 
 func init() {
+	flag.BoolVar(&g_Debug_ShowDebugView, "debug-view", false, "")
+	flag.BoolVar(&g_Debug_DontRevertOnError, "debug-no-revert-on-error", false, "")
+	flag.BoolVar(&g_Debug_ShowDebugView, "debug-dump-patch-on-apply", false, "")
 	flag.Parse()
 	if flag.NArg() == 0 {
 		g_TargetRef = "HEAD"
@@ -119,7 +122,7 @@ func main() {
 
 		doOnConfirm := func() error {
 			patch := commit.AsPatchString()
-			if k_Debug_DumpPatchToFile {
+			if g_Debug_DumpPatchToFile {
 				f, err := os.CreateTemp("", "git-split*.patch")
 				if err != nil {
 					log.Panicln(err)
@@ -128,7 +131,7 @@ func main() {
 			}
 
 			if err = git.ApplyPatch(strings.NewReader(patch)); err != nil {
-				if k_Debug_RevertOnError {
+				if g_Debug_DontRevertOnError {
 					git.Checkout(originalBranchName)
 				}
 				return err
@@ -136,19 +139,19 @@ func main() {
 
 			files := commit.GetSelectedFiles()
 			if err = git.Add(files...); err != nil {
-				if k_Debug_RevertOnError {
+				if g_Debug_DontRevertOnError {
 					git.Checkout(originalBranchName)
 				}
 				return err
 			}
 			if err = git.Commit(commit.Description); err != nil {
-				if k_Debug_RevertOnError {
+				if g_Debug_DontRevertOnError {
 					git.Checkout(originalBranchName)
 				}
 				return err
 			}
 			if err = git.Amend(); err != nil {
-				if k_Debug_RevertOnError {
+				if g_Debug_DontRevertOnError {
 					git.Checkout(originalBranchName)
 				}
 				return err
@@ -224,7 +227,7 @@ func layoutFn(c *Commit) func(g *gocui.Gui) error {
 			g.SetCurrentView(mainView.Name())
 		}
 
-		if k_Debug {
+		if g_Debug_ShowDebugView {
 			if _, err := LayoutDebugView(g); err != nil {
 				return err
 			}
