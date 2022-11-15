@@ -12,9 +12,10 @@ import (
 const k_MissingSpacer = "   "
 const k_DisplayTab = "    "
 const k_StartExpanded = Collapsed
+const k_PanicPartialSelection = "PartiallySelected is not a valid manual selection"
 
-var errBreak = fmt.Errorf("break out of callback loop")
-var errContinue = fmt.Errorf("continue to next iteration of callback loop")
+var ErrBreak = fmt.Errorf("break out of callback loop")
+var ErrContinue = fmt.Errorf("continue to next iteration of callback loop")
 
 type SelectionState int
 
@@ -23,6 +24,11 @@ const (
 	PartiallySelected
 	Deselected
 )
+
+type Selectable interface {
+	ToggleSelection()
+	SetSelection(SelectionState)
+}
 
 func (s SelectionState) String() string {
 	switch s {
@@ -64,7 +70,7 @@ func (e ExpansionState) String() string {
 type Commit struct {
 	Files []*File
 	// LineMap maps line numbers (cursor positions) to selection nodes (files, chunks, lines).
-	LineMap []interface{}
+	LineMap []Selectable
 	// Description includes the commit details, like commit message, etc.
 	Description string
 }
@@ -82,9 +88,9 @@ func (c *Commit) ForEachNode(ffn FileFunc, cfn ChunkFunc, lfn LineFunc) error {
 	for _, file := range c.Files {
 		if ffn != nil {
 			if err := ffn(file); err != nil {
-				if err == errBreak {
+				if err == ErrBreak {
 					break
-				} else if err == errContinue {
+				} else if err == ErrContinue {
 					continue
 				} else {
 					return err
@@ -105,7 +111,7 @@ func (commit *Commit) String() string {
 			commit.LineMap = append(commit.LineMap, f)
 
 			fmt.Fprint(sb, f.Expanded.String())
-			fmt.Fprint(sb, " ", f.Selected.String())
+			fmt.Fprint(sb, " ", f.selection.String())
 			if f.IsNew {
 				fmt.Fprint(sb, " (NEW FILE)")
 			} else {
@@ -122,19 +128,19 @@ func (commit *Commit) String() string {
 		},
 		func(f *File, c *Chunk) error {
 			if f.Expanded == Collapsed {
-				return errBreak
+				return ErrBreak
 			}
 
 			c.LineNumber = len(commit.LineMap)
 			commit.LineMap = append(commit.LineMap, c)
 
 			fmt.Fprint(sb, k_DisplayTab, c.Expanded.String())
-			fmt.Fprintf(sb, " %s %s\n", c.Selected.String(), color.CyanString(c.Header()))
+			fmt.Fprintf(sb, " %s %s\n", c.selection.String(), color.CyanString(c.Header()))
 			return nil
 		},
 		func(f *File, c *Chunk, l *Line) error {
 			if f.Expanded == Collapsed || c.Expanded == Collapsed {
-				return errBreak
+				return ErrBreak
 			}
 
 			commit.LineMap = append(commit.LineMap, l)
@@ -152,7 +158,7 @@ func (commit *Commit) String() string {
 				// selecting or deselecting context lines is pointless
 				fmt.Fprint(sb, k_MissingSpacer)
 			} else {
-				fmt.Fprint(sb, l.Selected.String())
+				fmt.Fprint(sb, l.selection.String())
 			}
 			fmt.Fprintf(sb, " \u001b[%dm%s\u001b[%dm", lineColor, l.String(), color.FgWhite)
 			return nil
@@ -166,16 +172,16 @@ func (c *Commit) AsPatchString() string {
 
 	c.ForEachNode(
 		func(f *File) error {
-			if f.Selected == Deselected {
-				return errContinue
+			if f.selection == Deselected {
+				return ErrContinue
 			}
 
 			fmt.Fprint(sb, f.Header())
 			return nil
 		},
 		func(_ *File, c *Chunk) error {
-			if c.Selected == Deselected {
-				return errContinue
+			if c.selection == Deselected {
+				return ErrContinue
 			}
 
 			// we will use the outdated chunk line counts and use git-apply --recount
@@ -185,9 +191,9 @@ func (c *Commit) AsPatchString() string {
 		func(_ *File, _ *Chunk, l *Line) error {
 			s := l.String()
 
-			if l.Selected == Deselected {
+			if l.selection == Deselected {
 				if l.Op == gitdiff.OpAdd {
-					return errContinue
+					return ErrContinue
 				} else if l.Op == gitdiff.OpDelete {
 					// removing OpDeletes makes the patch fail, so we change them into context lines
 					// for patches.
@@ -209,7 +215,7 @@ func (c *Commit) AsPatchString() string {
 func (c *Commit) GetSelectedFiles() []string {
 	ss := make([]string, 0, len(c.Files))
 	for _, file := range c.Files {
-		if file.Selected != Deselected {
+		if file.selection != Deselected {
 			ss = append(ss, file.NewName)
 		}
 	}
@@ -218,19 +224,42 @@ func (c *Commit) GetSelectedFiles() []string {
 
 type File struct {
 	*gitdiff.File
-	Selected   SelectionState
+	selection  SelectionState
 	Expanded   ExpansionState
 	LineNumber int
 	Chunks     []*Chunk
+}
+
+func (f *File) ToggleSelection() {
+	f.selection.Toggle()
+	f.afterSelection()
+}
+
+func (f *File) SetSelection(state SelectionState) {
+	f.selection = state
+	f.afterSelection()
+}
+
+func (f *File) afterSelection() {
+	f.ForEachNode(
+		func(_ *File, c *Chunk) error {
+			c.selection = f.selection
+			return nil
+		},
+		func(_ *File, c *Chunk, l *Line) error {
+			l.selection = f.selection
+			return nil
+		},
+	)
 }
 
 func (file *File) ForEachNode(cfn ChunkFunc, lfn LineFunc) error {
 	for _, chunk := range file.Chunks {
 		if cfn != nil {
 			if err := cfn(file, chunk); err != nil {
-				if err == errBreak {
+				if err == ErrBreak {
 					break
-				} else if err == errContinue {
+				} else if err == ErrContinue {
 					continue
 				} else {
 					return err
@@ -247,9 +276,9 @@ func (file *File) UpdateSelection() {
 	partiallySelectedChunkCount := 0
 	file.ForEachNode(
 		func(f *File, c *Chunk) error {
-			if c.Selected == Selected {
+			if c.selection == Selected {
 				selectedChunkCount++
-			} else if c.Selected == PartiallySelected {
+			} else if c.selection == PartiallySelected {
 				partiallySelectedChunkCount++
 			}
 			return nil
@@ -257,11 +286,11 @@ func (file *File) UpdateSelection() {
 		nil,
 	)
 	if selectedChunkCount == len(file.Chunks) {
-		file.Selected = Selected
+		file.selection = Selected
 	} else if selectedChunkCount > 0 || partiallySelectedChunkCount > 0 {
-		file.Selected = PartiallySelected
+		file.selection = PartiallySelected
 	} else {
-		file.Selected = Deselected
+		file.selection = Deselected
 	}
 }
 
@@ -305,7 +334,7 @@ func (file *File) Header() string {
 
 type Chunk struct {
 	*gitdiff.TextFragment
-	Selected            SelectionState
+	selection           SelectionState
 	Expanded            ExpansionState
 	LineNumber          int
 	Parent              *File
@@ -313,13 +342,34 @@ type Chunk struct {
 	NonContextLineCount int
 }
 
+func (c *Chunk) ToggleSelection() {
+	c.selection.Toggle()
+	c.afterSelection()
+}
+
+func (c *Chunk) SetSelection(state SelectionState) {
+	if state == PartiallySelected {
+		panic(k_PanicPartialSelection)
+	}
+	c.selection = state
+	c.afterSelection()
+}
+
+func (c *Chunk) afterSelection() {
+	c.ForEachNode(func(_ *File, _ *Chunk, l *Line) error {
+		l.selection = c.selection
+		return nil
+	})
+	c.Parent.UpdateSelection()
+}
+
 func (chunk *Chunk) ForEachNode(lfn LineFunc) error {
 	for _, line := range chunk.Lines {
 		if lfn != nil {
 			if err := lfn(chunk.Parent, chunk, line); err != nil {
-				if err == errBreak {
+				if err == ErrBreak {
 					break
-				} else if err == errContinue {
+				} else if err == ErrContinue {
 					continue
 				} else {
 					return err
@@ -336,9 +386,9 @@ func (chunk *Chunk) UpdateSelection() {
 	chunk.ForEachNode(
 		func(f *File, c *Chunk, l *Line) error {
 			if l.Op != gitdiff.OpContext {
-				if l.Selected == Selected {
+				if l.selection == Selected {
 					selectedLineCount++
-				} else if l.Selected == PartiallySelected {
+				} else if l.selection == PartiallySelected {
 					partiallySelectedLineCount++
 				}
 			}
@@ -346,19 +396,32 @@ func (chunk *Chunk) UpdateSelection() {
 		},
 	)
 	if selectedLineCount == chunk.NonContextLineCount {
-		chunk.Selected = Selected
+		chunk.selection = Selected
 	} else if selectedLineCount > 0 || partiallySelectedLineCount > 0 {
-		chunk.Selected = PartiallySelected
+		chunk.selection = PartiallySelected
 	} else {
-		chunk.Selected = Deselected
+		chunk.selection = Deselected
 	}
 	chunk.Parent.UpdateSelection()
 }
 
 type Line struct {
 	gitdiff.Line
-	Selected SelectionState
-	Parent   *Chunk
+	selection SelectionState
+	Parent    *Chunk
+}
+
+func (l *Line) ToggleSelection() {
+	l.selection.Toggle()
+	l.Parent.UpdateSelection()
+}
+
+func (l *Line) SetSelection(state SelectionState) {
+	if state == PartiallySelected {
+		panic(k_PanicPartialSelection)
+	}
+	l.selection = state
+	l.Parent.UpdateSelection()
 }
 
 func ParseCommit(r io.Reader) (commit *Commit, err error) {

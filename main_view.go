@@ -219,32 +219,7 @@ func toggleSelection(v *MainView) func(*gocui.Gui, *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		_, y := v.View.Cursor()
 		i := v.commit.LineMap[y]
-		switch node := i.(type) {
-		case *ir.File:
-			node.Selected.Toggle()
-			node.ForEachNode(
-				func(f *ir.File, c *ir.Chunk) error {
-					c.Selected = node.Selected
-					return nil
-				},
-				func(f *ir.File, c *ir.Chunk, l *ir.Line) error {
-					l.Selected = node.Selected
-					return nil
-				},
-			)
-		case *ir.Chunk:
-			node.Selected.Toggle()
-			node.ForEachNode(func(f *ir.File, c *ir.Chunk, l *ir.Line) error {
-				l.Selected = node.Selected
-				return nil
-			})
-			node.Parent.UpdateSelection()
-		case *ir.Line:
-			if node.Op != gitdiff.OpContext {
-				node.Selected.Toggle()
-				node.Parent.UpdateSelection()
-			}
-		}
+		i.ToggleSelection()
 		v.printContent()
 		return nil
 	}
@@ -260,15 +235,15 @@ func selectAll(v *MainView, state ir.SelectionState) func(*gocui.Gui, *gocui.Vie
 	return func(_ *gocui.Gui, _ *gocui.View) error {
 		v.commit.ForEachNode(
 			func(f *ir.File) error {
-				f.Selected = state
+				f.SetSelection(state)
 				return nil
 			},
 			func(_ *ir.File, c *ir.Chunk) error {
-				c.Selected = state
+				c.SetSelection(state)
 				return nil
 			},
 			func(_ *ir.File, _ *ir.Chunk, l *ir.Line) error {
-				l.Selected = state
+				l.SetSelection(state)
 				return nil
 			},
 		)
