@@ -9,6 +9,7 @@ import (
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/fatih/color"
+	"github.com/smithjacobj/git-split/difftree"
 	"github.com/smithjacobj/go-git-utils"
 )
 
@@ -92,7 +93,7 @@ func main() {
 			log.Panicln(patch.String())
 		}
 
-		commit, err := ParseCommit(patch)
+		commit, err := difftree.ParseCommit(patch)
 		if err != nil {
 			log.Panicln(err)
 		} else if len(commit.Files) == 0 {
@@ -211,7 +212,7 @@ func main() {
 	}
 }
 
-func layoutFn(c *Commit) func(g *gocui.Gui) error {
+func layoutFn(c *difftree.Commit) func(g *gocui.Gui) error {
 	return func(g *gocui.Gui) error {
 		if _, err := LayoutHelpView(g); err != nil {
 			return err
