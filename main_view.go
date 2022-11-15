@@ -6,6 +6,7 @@ import (
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
+	ir "github.com/smithjacobj/git-split/difftree"
 )
 
 const k_MainView = "main"
@@ -16,7 +17,7 @@ type MainView struct {
 	*gocui.Gui
 	*gocui.View
 
-	commit *Commit
+	commit *ir.Commit
 }
 
 func LayoutMainView(g *gocui.Gui) (v *MainView, isInit bool, err error) {
@@ -43,7 +44,7 @@ func LayoutMainView(g *gocui.Gui) (v *MainView, isInit bool, err error) {
 	return v, isInit, nil
 }
 
-func (v *MainView) SetCommit(c *Commit) {
+func (v *MainView) SetCommit(c *ir.Commit) {
 	v.commit = c
 	v.printContent()
 	v.View.SetCursor(0, 0)
@@ -68,16 +69,16 @@ func (v *MainView) setKeybindings() error {
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyPgdn, gocui.ModNone, moveCursor(v, 15)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModNone, setExpansionState(v, Collapsed)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModNone, setExpansionState(v, ir.Collapsed)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModShift, setExpansionAll(v, Collapsed)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowLeft, gocui.ModShift, setExpansionAll(v, ir.Collapsed)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModNone, setExpansionState(v, Expanded)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModNone, setExpansionState(v, ir.Expanded)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModShift, setExpansionAll(v, Expanded)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeyArrowRight, gocui.ModShift, setExpansionAll(v, ir.Expanded)); err != nil {
 		return err
 	}
 	if err := v.Gui.SetKeybinding(v.View.Name(), gocui.KeySpace, gocui.ModNone, toggleSelection(v)); err != nil {
@@ -86,10 +87,10 @@ func (v *MainView) setKeybindings() error {
 	if err := v.Gui.SetKeybinding(v.View.Name(), 'c', gocui.ModNone, confirm(v)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), 'a', gocui.ModNone, selectAll(v, Selected)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), 'a', gocui.ModNone, selectAll(v, ir.Selected)); err != nil {
 		return err
 	}
-	if err := v.Gui.SetKeybinding(v.View.Name(), 'A', gocui.ModNone, selectAll(v, Deselected)); err != nil {
+	if err := v.Gui.SetKeybinding(v.View.Name(), 'A', gocui.ModNone, selectAll(v, ir.Deselected)); err != nil {
 		return err
 	}
 	return nil
@@ -132,7 +133,7 @@ func moveCursor(v *MainView, dy int) func(*gocui.Gui, *gocui.View) error {
 				return nil
 			}
 			switch val := v.commit.LineMap[cy].(type) {
-			case *Line:
+			case *ir.Line:
 				if val.Op == gitdiff.OpContext {
 					cy += d1y
 				} else {
@@ -148,30 +149,30 @@ func moveCursor(v *MainView, dy int) func(*gocui.Gui, *gocui.View) error {
 	}
 }
 
-func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.View) error {
+func setExpansionState(v *MainView, state ir.ExpansionState) func(*gocui.Gui, *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		x, y := v.View.Cursor()
 		i := v.commit.LineMap[y]
 		switch node := i.(type) {
-		case *File:
-			if state == Expanded && node.Expanded == Expanded {
+		case *ir.File:
+			if state == ir.Expanded && node.Expanded == ir.Expanded {
 				// if already expanded, go to first child
 				y++
 			} else {
 				node.Expanded = state
 			}
-		case *Chunk:
-			if state == Collapsed && node.Expanded == Collapsed {
+		case *ir.Chunk:
+			if state == ir.Collapsed && node.Expanded == ir.Collapsed {
 				// if already collapsed, go up to parent
 				y = node.Parent.LineNumber
-			} else if state == Expanded && node.Expanded == Expanded {
+			} else if state == ir.Expanded && node.Expanded == ir.Expanded {
 				// if already expanded, go to first child
 				y++
 			} else {
 				node.Expanded = state
 			}
-		case *Line:
-			if state == Collapsed {
+		case *ir.Line:
+			if state == ir.Collapsed {
 				y = node.Parent.LineNumber
 			}
 		}
@@ -182,16 +183,16 @@ func setExpansionState(v *MainView, state ExpansionState) func(*gocui.Gui, *gocu
 	}
 }
 
-func setExpansionAll(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.View) error {
+func setExpansionAll(v *MainView, state ir.ExpansionState) func(*gocui.Gui, *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
 		x, y := v.View.Cursor()
 		i := v.commit.LineMap[y]
 		v.commit.ForEachNode(
-			func(f *File) error {
+			func(f *ir.File) error {
 				f.Expanded = state
 				return nil
 			},
-			func(_ *File, c *Chunk) error {
+			func(_ *ir.File, c *ir.Chunk) error {
 				c.Expanded = state
 				return nil
 			},
@@ -199,12 +200,12 @@ func setExpansionAll(v *MainView, state ExpansionState) func(*gocui.Gui, *gocui.
 		)
 		v.printContent()
 
-		if state == Collapsed {
+		if state == ir.Collapsed {
 			// in this case we want to jump to the file that contained the previously-selected line
 			switch node := i.(type) {
-			case *Chunk:
+			case *ir.Chunk:
 				y = node.Parent.LineNumber
-			case *Line:
+			case *ir.Line:
 				y = node.Parent.Parent.LineNumber
 			}
 			v.View.SetCursor(x, y)
@@ -219,26 +220,26 @@ func toggleSelection(v *MainView) func(*gocui.Gui, *gocui.View) error {
 		_, y := v.View.Cursor()
 		i := v.commit.LineMap[y]
 		switch node := i.(type) {
-		case *File:
+		case *ir.File:
 			node.Selected.Toggle()
 			node.ForEachNode(
-				func(f *File, c *Chunk) error {
+				func(f *ir.File, c *ir.Chunk) error {
 					c.Selected = node.Selected
 					return nil
 				},
-				func(f *File, c *Chunk, l *Line) error {
+				func(f *ir.File, c *ir.Chunk, l *ir.Line) error {
 					l.Selected = node.Selected
 					return nil
 				},
 			)
-		case *Chunk:
+		case *ir.Chunk:
 			node.Selected.Toggle()
-			node.ForEachNode(func(f *File, c *Chunk, l *Line) error {
+			node.ForEachNode(func(f *ir.File, c *ir.Chunk, l *ir.Line) error {
 				l.Selected = node.Selected
 				return nil
 			})
 			node.Parent.UpdateSelection()
-		case *Line:
+		case *ir.Line:
 			if node.Op != gitdiff.OpContext {
 				node.Selected.Toggle()
 				node.Parent.UpdateSelection()
@@ -255,18 +256,18 @@ func confirm(v *MainView) func(*gocui.Gui, *gocui.View) error {
 	}
 }
 
-func selectAll(v *MainView, state SelectionState) func(*gocui.Gui, *gocui.View) error {
+func selectAll(v *MainView, state ir.SelectionState) func(*gocui.Gui, *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
 		v.commit.ForEachNode(
-			func(f *File) error {
+			func(f *ir.File) error {
 				f.Selected = state
 				return nil
 			},
-			func(_ *File, c *Chunk) error {
+			func(_ *ir.File, c *ir.Chunk) error {
 				c.Selected = state
 				return nil
 			},
-			func(_ *File, _ *Chunk, l *Line) error {
+			func(_ *ir.File, _ *ir.Chunk, l *ir.Line) error {
 				l.Selected = state
 				return nil
 			},
