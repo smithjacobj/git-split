@@ -15,7 +15,7 @@ import (
 const (
 	k_Debug                 = false // default = false
 	k_Debug_RevertOnError   = true  // default = true
-	k_Debug_DumpPatchToFile = true  // default = false
+	k_Debug_DumpPatchToFile = false // default = false
 )
 
 var g_TargetRef string
