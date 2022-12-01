@@ -160,6 +160,12 @@ func setExpansionState(v *MainView, state ir.ExpansionState) func(*gocui.Gui, *g
 				y++
 			} else {
 				node.Expanded = state
+				// expand all chunks or it gets tedious
+				if state == ir.Expanded {
+					for _, chunk := range node.Chunks {
+						chunk.Expanded = state
+					}
+				}
 			}
 		case *ir.Chunk:
 			if state == ir.Collapsed && node.Expanded == ir.Collapsed {
