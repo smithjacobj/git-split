@@ -13,6 +13,7 @@ const k_MissingSpacer = "   "
 const k_DisplayTab = "    "
 const k_StartExpanded = Collapsed
 const k_PanicPartialSelection = "PartiallySelected is not a valid manual selection"
+const k_NoEOL = "\\ No newline at end of file\n"
 
 var ErrBreak = fmt.Errorf("break out of callback loop")
 var ErrContinue = fmt.Errorf("continue to next iteration of callback loop")
@@ -160,7 +161,15 @@ func (commit *Commit) String() string {
 			} else {
 				fmt.Fprint(sb, l.selection.String())
 			}
+
 			fmt.Fprintf(sb, " \u001b[%dm%s\u001b[%dm", lineColor, l.String(), color.FgWhite)
+
+			if l.NoEOL() {
+				// we make sure that the line map remains normalized even with this added virtual line.
+				commit.LineMap = append(commit.LineMap, l)
+				fmt.Fprint(sb, "\n", k_DisplayTab, k_DisplayTab, k_DisplayTab, k_DisplayTab)
+				fmt.Fprintf(sb, "\u001b[%dm%s%s\u001b[%dm", lineColor, l.Op.String(), k_NoEOL, color.FgWhite)
+			}
 			return nil
 		},
 	)
@@ -203,7 +212,7 @@ func (c *Commit) AsPatchString() string {
 
 			fmt.Fprint(sb, s)
 			if l.NoEOL() {
-				fmt.Fprint(sb, "\n\\ No newline at end of file\n")
+				fmt.Fprint(sb, "\n", k_NoEOL)
 			}
 			return nil
 		},
